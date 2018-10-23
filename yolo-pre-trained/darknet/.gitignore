@@ -1,18 +1,10 @@
 *.o
-*.h5
 *.dSYM
 *.csv
 *.out
 *.png
 *.jpg
 *.pyc
-*.weights
-*.backup
-*.txt
-*.74
-*.out*
-*.so
-**/.ipynb_checkpoints
 old/
 mnist/
 data/
@@ -24,6 +16,7 @@ convnet/
 decaf/
 submission/
 cfg/
+darknet
 .fuse*
 
 # OS Generated #

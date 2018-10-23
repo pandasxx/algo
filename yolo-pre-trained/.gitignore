@@ -1,5 +1,4 @@
 *.o
-*.h5
 *.dSYM
 *.csv
 *.out
@@ -9,10 +8,6 @@
 *.weights
 *.backup
 *.txt
-*.74
-*.out*
-*.so
-**/.ipynb_checkpoints
 old/
 mnist/
 data/
