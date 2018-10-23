@@ -40,7 +40,7 @@ def shuffle_data_list(data_list, label_list):
     return data_list, label_list
 
 # 使用padding方式填充原图为正方形，并resize到目标大小
-def resize_img_with_padding(img, size):
+def resize_img_with_padding(img, size, need_resize):
     longer_side = max(img.size)
     horizontal_padding = (longer_side - img.size[0]) / 2
     vertical_padding = (longer_side - img.size[1]) / 2
@@ -65,23 +65,29 @@ def resize_img_with_padding(img, size):
             img.size[1] + (299 - img.size[1]) / 2
         )
     )
-    img_resized = img_croped.resize((size, size))
+    if (need_resize == True):
+        img_resized = img.resize((size, size))
+    else:
+        img_resized = img
     return img_resized
 
-def resize_img(img, size):
-    img_resized = img.resize((size, size))
+def resize_img(img, size, need_resize):
+    if (need_resize == True):
+        img_resized = img.resize((size, size))
+    else:
+        img_resized = img
     return img_resized
 
-def process_one_img(img_path, img_size, dst_folder):
+def process_one_img(img_path, img_size, dst_folder, padding, need_resize):
     img = Image.open(img_path)
     # 有些图片是png（RGBA），会导致后面出错，在这里统一转换成RGB
     if (img.mode != 'RGB'):
         img =img.convert("RGB")
     
     if (padding == True):
-        img_resized = resize_img_with_padding(img, img_size)
+        img_resized = resize_img_with_padding(img, img_size, need_resize)
     else:
-        img_resized = resize_img(img, img_size)
+        img_resized = resize_img(img, img_size, need_resize)
 
     path_elements = img_path.split('/')
     new_sub_path = path_elements[-2] + '/' + path_elements[-1]
@@ -97,24 +103,26 @@ def process_one_img(img_path, img_size, dst_folder):
     # img_resized 是 PIL对象，但可以这样直接赋值给numpy数组，且类型为float
 
 # 读取图片到指定的tfrecord文件中
-def read_img_2_folder(imgs_list, label_list, img_size, dst_folder, padding):
+def read_img_2_folder(imgs_list, label_list, img_size, dst_folder, padding, need_resize):
     
-    executor = ProcessPoolExecutor(max_workers=cpu_count() - 4)
+    executor = ProcessPoolExecutor(max_workers=cpu_count() - 2)
     # executor = ProcessPoolExecutor(1)
     tasks = []
 
     for index, img_path in enumerate(imgs_list):
-        tasks.append(executor.submit(process_one_img, img_path, img_size, dst_folder, padding))
-        
+        tasks.append(executor.submit(process_one_img, img_path, img_size, dst_folder, padding,  need_resize))
+        if (index % 100000 == 0):
+            print("added ", index, "tasks")
 
     job_count = len(tasks)
     for future in as_completed(tasks):
         # result = future.result()  # get the returning result from calling fuction
         job_count -= 1
-        #print("One Job Done, last Job Count: %s" % (job_count))
+        if (job_count % 10000 == 0):
+            print("10000 Job Done, last Job Count: %s" % (job_count))
 
 
-def data_preprocess(pic_src, train_ratio, img_size, data_dst, padding = False):
+def data_preprocess(pic_src, train_ratio, img_size, data_dst, padding = False, need_resize = False):
     # 读取所有路径，并乱序排列
     all_images, all_labels, classes = get_all_files_path(pic_src)
     all_images, all_labels = shuffle_data_list(all_images, all_labels)
@@ -136,8 +144,8 @@ def data_preprocess(pic_src, train_ratio, img_size, data_dst, padding = False):
     valid_images  = all_images[train_num:]
 
     #存储到h5py中
-    read_img_2_folder(train_images, train_labels, img_size, data_dst[0], padding)
-    read_img_2_folder(valid_images, valid_labels, img_size, data_dst[1], padding)
+    read_img_2_folder(train_images, train_labels, img_size, data_dst[0], padding, need_resize)
+    read_img_2_folder(valid_images, valid_labels, img_size, data_dst[1], padding, need_resize)
 
 def submit_data_preprocess(pic_src, pic_size, data_dst):
     all_images = []
