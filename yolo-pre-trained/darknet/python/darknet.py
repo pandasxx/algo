@@ -2,6 +2,8 @@ from ctypes import *
 import math
 import random
 import os
+import cv2
+import scipy.misc
 
 def sample(probs):
     s = sum(probs)
@@ -17,6 +19,18 @@ def c_array(ctype, values):
     arr = (ctype*len(values))()
     arr[:] = values
     return arr
+
+def array_to_image(arr):
+    import numpy as np
+    # need to return old values to avoid python freeing memory
+    arr = arr.transpose(2,0,1)
+    c = arr.shape[0]
+    h = arr.shape[1]
+    w = arr.shape[2]
+    arr = np.ascontiguousarray(arr.flat, dtype=np.float32) / 255.0
+    data = arr.ctypes.data_as(POINTER(c_float))
+    im = IMAGE(w,h,c,data)
+    return im, arr
 
 class BOX(Structure):
     _fields_ = [("x", c_float),
@@ -44,7 +58,7 @@ class METADATA(Structure):
                 ("names", POINTER(c_char_p))]
 
     
-darknet_dir = "/home/sakulaki/code/yolo-pre-trained/darknet/"
+darknet_dir = "/home/hdd0/Develop/algo/yolo-pre-trained/darknet/"
 #lib = CDLL("/home/pjreddie/documents/darknet/libdarknet.so", RTLD_GLOBAL)
 lib = CDLL(darknet_dir + "libdarknet.so", RTLD_GLOBAL)
 lib.network_width.argtypes = [c_void_p]
@@ -108,6 +122,10 @@ load_image = lib.load_image_color
 load_image.argtypes = [c_char_p, c_int, c_int]
 load_image.restype = IMAGE
 
+load_image_from_memory = lib.load_image_from_memory_color
+load_image_from_memory.argtypes = [POINTER(c_char), c_int, c_int, c_int]
+load_image_from_memory.restype = IMAGE
+
 rgbgr_image = lib.rgbgr_image
 rgbgr_image.argtypes = [IMAGE]
 
@@ -142,6 +160,48 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45):
     free_image(im)
     free_detections(dets, num)
     return res
+
+def detect_on_memory(net, meta, image_path, thresh=.5, hier_thresh=.5, nms=.45):
+    im = None
+    with open(image_path, 'rb') as f:
+        buf = f.read()
+        im = load_image_from_memory(buf, len(buf), 0, 0)
+    num = c_int(0)
+    pnum = pointer(num)
+    predict_image(net, im)
+    dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, None, 0, pnum)
+    num = pnum[0]
+    if (nms): do_nms_obj(dets, num, meta.classes, nms);
+
+    res = []
+    for j in range(num):
+        for i in range(meta.classes):
+            if dets[j].prob[i] > 0:
+                b = dets[j].bbox
+                res.append((meta.names[i], dets[j].prob[i], (b.x, b.y, b.w, b.h)))
+    res = sorted(res, key=lambda x: -x[1])
+    free_image(im)
+    free_detections(dets, num)
+    return res
+
+def detect_numpy(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45):
+    im, arr = array_to_image(image)
+    num = c_int(0)
+    pnum = pointer(num)
+    predict_image(net, im)
+    dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, None, 0, pnum)
+    num = pnum[0]
+    if (nms): do_nms_obj(dets, num, meta.classes, nms);
+
+    res = []
+    for j in range(num):
+        for i in range(meta.classes):
+            if dets[j].prob[i] > 0:
+                b = dets[j].bbox
+                res.append((meta.names[i], dets[j].prob[i], (b.x, b.y, b.w, b.h)))
+    res = sorted(res, key=lambda x: -x[1])
+    free_detections(dets, num)
+    return res
     
 if __name__ == "__main__":
     #net = load_net("cfg/densenet201.cfg", "/home/pjreddie/trained/densenet201.weights", 0)
@@ -151,10 +211,14 @@ if __name__ == "__main__":
     #print r[:10]
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     path = "../data/dog.jpg"
-    net = load_net(b"../cfg/yolov3-minitest-infer.cfg", b"../backup/yolov3-minitest_70000.weights", 0)
-    meta = load_meta(b"../cfg/minitest.data")
+    #net = load_net(b"../cfg/yolov3-minitest-12-infer.cfg", b"../backup/yolov3-minitest-12_300000.weights", 0)
+    net = load_net(b"../cfg/yolov3-minitest-12-infer.cfg", b"../darknet53.conv.74", 0)
+    meta = load_meta(b"../cfg/minitest-12.data")
 # use c api, str arg must be byte type    
-    r = detect(net, meta, path.encode('utf-8'))
+    #r = detect_on_memory(net, meta, path.encode('utf-8'))
+    #r = detect_on_memory(net, meta, path)
+    image = scipy.misc.imread('../data/dog.jpg')
+    r = detect_numpy(net, meta, image)
     print(r)
 
 
