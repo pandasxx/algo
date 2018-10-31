@@ -9,6 +9,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed, wait
 from PIL import Image
 import numpy as np
 import h5py
+import cv2
 
 def read_pic_path(pic_src):
     # 得出子目录
@@ -59,10 +60,10 @@ def resize_img_with_padding(img, size):
 
     img_croped = img.crop(
         (
-            -((299 - img.size[0]) / 2),
-            -((299 - img.size[1]) / 2),
-            img.size[0] + (299 - img.size[0]) / 2,
-            img.size[1] + (299 - img.size[1]) / 2
+            -((size - img.size[0]) / 2),
+            -((size - img.size[1]) / 2),
+            img.size[0] + (size - img.size[0]) / 2,
+            img.size[1] + (size - img.size[1]) / 2
         )
     )
     img_resized = img_croped.resize((size, size))
@@ -72,7 +73,7 @@ def resize_img(img, size):
     img_resized = img.resize((size, size))
     return img_resized
 
-def process_one_img(img_path, img_size, dst_folder):
+def process_one_img(img_path, img_size, dst_folder, padding):
     img = Image.open(img_path)
     # 有些图片是png（RGBA），会导致后面出错，在这里统一转换成RGB
     if (img.mode != 'RGB'):
@@ -91,8 +92,11 @@ def process_one_img(img_path, img_size, dst_folder):
 
     if (False == os.path.exists(new_folder)):
         os.makedirs(new_folder)
-    img_resized.save(new_path, 'jpeg')
-#   img_resized.show()
+#    img_resized.save(new_path, 'jpeg')
+
+    cv_image = cv2.cvtColor(np.asarray(img_resized), cv2.COLOR_RGBA2BGR)
+    cv2.imwrite((new_path), cv_image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+
     img.close()
     # img_resized 是 PIL对象，但可以这样直接赋值给numpy数组，且类型为float
 
@@ -114,7 +118,7 @@ def read_img_2_folder(imgs_list, label_list, img_size, dst_folder, padding):
         #print("One Job Done, last Job Count: %s" % (job_count))
 
 
-def data_preprocess(pic_src, train_ratio, img_size, data_dst, padding = False):
+def data_preprocess(pic_src, train_ratio, img_size, data_dst, padding = True):
     # 读取所有路径，并乱序排列
     all_images, all_labels, classes = get_all_files_path(pic_src)
     all_images, all_labels = shuffle_data_list(all_images, all_labels)
