@@ -1,5 +1,6 @@
 *.o
 *.h5
+*.a
 *.dSYM
 *.csv
 *.out
